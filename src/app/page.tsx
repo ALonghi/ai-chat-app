@@ -4,33 +4,42 @@ import { useEffect, useRef, useState } from "react";
 import Header from "@/components/Header";
 import MessageList from "@/components/MessageList";
 import Composer from "@/components/Composer";
-import { Message } from "../types/message";
+import { Message } from "@/types/message";
 
 export default function Page() {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "system",
       content:
-        "You are a helpful assistant. Always format output as Markdown. Use real Markdown headings (#, ##, ###), bold (**), italics (*), lists, and code fences when appropriate.",
+        "You are a helpful assistant. Always format output as real Markdown headings (#, ##, ###), bold (**), italics (*), lists, and code fences when appropriate. When not needed the output as non-styled paragraph is perfect.",
     },
   ]);
-
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const listEndRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
-
+  const chatRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    listEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = chatRef.current;
+    if (!el) return;
+    // simple “stick to bottom” behavior
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    if (nearBottom) {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    }
   }, [messages, loading]);
+
+  function cancel() {
+    abortRef.current?.abort();
+    setLoading(false);
+  }
 
   async function send() {
     const text = input.trim();
     if (!text || loading) return;
 
-    const nextMessages: Message[] = [...messages, { role: "user", content: text }];
-    // Pre-create one assistant bubble (empty) that we'll fill while streaming.
+    const nextMessages = [...messages, { role: "user", content: text } as Message];
+    // prepare streaming bubble
     setMessages([...nextMessages, { role: "assistant", content: "" }]);
     setInput("");
     setLoading(true);
@@ -45,28 +54,22 @@ export default function Page() {
         body: JSON.stringify({ messages: nextMessages }),
         signal: ac.signal,
       });
-
-      if (!res.ok || !res.body) {
-        throw new Error(`HTTP ${res.status}`);
-      }
+      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
 
-      // Accumulator + RAF batching to reduce React re-renders and avoid duplicates.
       let acc = "";
       let rafPending = false;
-      function flushToUI() {
+      const flush = () => {
         setMessages((prev) => {
           const copy = [...prev];
           const last = copy[copy.length - 1];
-          if (last?.role === "assistant") {
-            last.content = acc; // assign the full accumulated content (safe against duplicates)
-          }
+          if (last?.role === "assistant") last.content = acc; // assign (prevents duplicates)
           return copy;
         });
         rafPending = false;
-      }
+      };
 
       while (true) {
         const { value, done } = await reader.read();
@@ -74,42 +77,55 @@ export default function Page() {
         const chunk = decoder.decode(value, { stream: true });
         if (!chunk) continue;
 
-        // Append whatever the backend sent
-        acc += chunk;
+        // supports plain text or SSE-ish lines; accumulate to acc
+        const lines = chunk.split("\n");
+        for (const line of lines) {
+          if (line.startsWith("data:")) {
+            const payload = line.slice(5).trim();
+            try {
+              const evt = JSON.parse(payload);
+              if (evt?.text) acc += evt.text;
+            } catch {
+              acc += payload;
+            }
+          } else {
+            acc += line;
+            if (lines.length > 1) acc += "\n";
+          }
+        }
 
-        // Batch DOM updates to animation frames
         if (!rafPending) {
           rafPending = true;
-          requestAnimationFrame(flushToUI);
+          requestAnimationFrame(flush);
         }
       }
+      if (rafPending) flush();
 
-      // final flush (in case RAF didn't run)
-      if (rafPending) flushToUI();
+      // Optional: coerce plain "Heading:" into Markdown headings if none present
+      setMessages((prev) => {
+        const copy = [...prev];
+        const last = copy[copy.length - 1];
+        if (last?.role === "assistant" && last.content && !/^\s*#{1,6}\s+/m.test(last.content)) {
+          last.content = last.content
+            .replace(/^(?:\s*)Heading:\s*(.+)$/im, (_, t) => `# ${t}`)
+            .replace(/^(?:\s*)(Subheading|Subtitle):\s*(.+)$/im, (_, _l, t) => `## ${t}`);
+        }
+        return copy;
+      });
     } catch (err) {
-      // If the user intentionally aborted, don't show an error message.
       if (ac.signal.aborted) {
-        // Instead of removing an empty assistant bubble, mark it as stopped:
+        // show a subtle stopped state if nothing streamed
         setMessages((prev) => {
           const copy = [...prev];
           const last = copy[copy.length - 1];
-          if (last?.role === "assistant" && last.content === "") {
-            // <-- Replace the removal with this line:
-            last.content = "[stopped]";
-          }
+          if (last?.role === "assistant" && last.content === "") last.content = "[stopped]";
           return copy;
         });
-        // No error UI needed for an intentional stop.
       } else {
-        // Unexpected error — replace the assistant bubble with the error message.
         console.error("Streaming error:", err);
         setMessages((prev) => [
           ...prev.slice(0, -1),
-          {
-            role: "assistant",
-            content:
-              "Sorry—something went wrong while streaming. Please try again.",
-          },
+          { role: "assistant", content: "Sorry—something went wrong while streaming. Please try again." },
         ]);
       }
     } finally {
@@ -118,25 +134,20 @@ export default function Page() {
     }
   }
 
-  function cancel() {
-    // user pressed Stop
-    abortRef.current?.abort();
-    // We don't immediately mutate messages here — the send() catch/finally will clean up.
-    setLoading(false);
-  }
-
   return (
     <div className="bg">
-      <main className="shell">
+      <main className="mx-auto grid h-full w-full max-w-[920px] grid-rows-[auto_1fr_auto] gap-4 px-4 pt-8">
         <Header />
 
-        {/* unified panel */}
-        <section className="glass panel">
-          <div className="chat">     {/* scrolls */}
-            <MessageList messages={messages} loading={loading} listEndRef={listEndRef} />
+        {/* Unified glass panel (chat + composer) */}
+        <section className="glass grid grid-rows-[1fr_auto] overflow-hidden rounded-3xl">
+          <div ref={chatRef} className="chat-scroll min-h-0 overflow-y-auto p-4">
+            {/* MessageList no longer needs listEndRef */}
+            <MessageList messages={messages} loading={loading} />
           </div>
 
-          <div className="composer"> {/* sticks at bottom of panel */}
+
+          <div className="border-t border-white/20 bg-white/5 p-3">
             <Composer
               input={input}
               setInput={setInput}
@@ -147,15 +158,6 @@ export default function Page() {
           </div>
         </section>
 
-        {/* <footer className="footer">
-          <span>
-            Streaming via OpenAI Chat Completions API (
-            <a href="https://platform.openai.com/docs/api-reference/chat">
-              docs
-            </a>
-            ).
-          </span>
-        </footer> */}
       </main>
     </div>
   );

@@ -1,0 +1,162 @@
+@use "tailwindcss";
+
+/* --- Minimal resets --- */
+* {
+  box-sizing: border-box;
+  color: white;
+}
+html,
+body {
+  height: 100%;
+}
+body {
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
+    "Helvetica Neue", Arial;
+  background: #0b1220; /* fallback under gradients */
+}
+
+/* --- Liquid background (single layer) --- */
+.bg {
+  position: fixed; inset: 0; overflow: hidden;
+  background:
+    radial-gradient(1100px 700px at 12% -10%, rgba(99,102,241,0.18) 12%, transparent 58%),
+    radial-gradient(900px 600px at 115% 10%, rgba(236,72,153,0.14) 10%, transparent 60%),
+    radial-gradient(800px 520px at -10% 110%, rgba(34,197,94,0.12) 10%, transparent 60%),
+    radial-gradient(700px 520px at 110% 115%, rgba(6,182,212,0.14) 10%, transparent 60%),
+    linear-gradient(180deg, #0b1220 0%, #0a0f20 100%);
+}
+.bg::before,
+.bg::after {
+  content: "";
+  position: absolute; width: 360px; height: 360px; border-radius: 50%;
+  filter: blur(42px); opacity: .45; animation: float 16s ease-in-out infinite;
+}
+.bg::before { left: -90px; top: -60px; background: radial-gradient(closest-side, #7c3aed55, transparent 70%); }
+.bg::after  { right: -80px; bottom: -60px; background: radial-gradient(closest-side, #06b6d455, transparent 70%); animation-duration: 22s; }
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(30px, -20px);
+  }
+}
+
+/* --- Single “glass” panel --- */
+.glass {
+  background:
+    radial-gradient(120% 140% at 0% 0%, rgba(99,102,241,.10), transparent 60%),
+    radial-gradient(120% 140% at 100% 0%, rgba(236,72,153,.08), transparent 60%),
+    radial-gradient(120% 140% at 0% 100%, rgba(34,197,94,.07), transparent 60%),
+    radial-gradient(120% 140% at 100% 100%, rgba(6,182,212,.08), transparent 60%),
+    linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,.05));
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  border: 1px solid rgba(255,255,255,.22);
+  border-radius: 24px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 10px 30px rgba(0,0,0,.25);
+}
+
+
+/* --- Bubble “glass-lite” skin (structure is handled by Tailwind) --- */
+.bubble {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.09),
+    rgba(255, 255, 255, 0.06)
+  );
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+.bubble.user {
+  background: linear-gradient(
+    180deg,
+    rgba(96, 165, 250, 0.16),
+    rgba(29, 78, 216, 0.12)
+  );
+  border-color: rgba(96, 165, 250, 0.28);
+}
+
+/* --- Scrollbar only on the chat area --- */
+.chat-scroll::-webkit-scrollbar {
+  width: 10px;
+}
+.chat-scroll::-webkit-scrollbar-thumb {
+  background: #ffffff22;
+  border-radius: 8px;
+}
+
+/* --- Typing dot --- */
+.dot-cursor {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: dotPulse 1s ease-in-out infinite;
+}
+@keyframes dotPulse {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.4;
+  }
+  50% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.8);
+    opacity: 0.4;
+  }
+}
+
+/* --- Markdown typography inside bubbles --- */
+.bubble .content h1,
+.bubble .content h2,
+.bubble .content h3 {
+  margin: 0.5em 0 0.35em;
+  line-height: 1.2;
+  font-weight: 700;
+}
+.bubble .content h1 {
+  font-size: 1.5rem;
+}
+.bubble .content h2 {
+  font-size: 1.25rem;
+}
+.bubble .content h3 {
+  font-size: 1.125rem;
+}
+.bubble .content p {
+  margin: 0.45em 0;
+}
+.bubble .content ul,
+.bubble .content ol {
+  padding-left: 1.2em;
+  margin: 0.4em 0;
+}
+.bubble .content code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", monospace;
+  font-size: 0.95em;
+  padding: 0.1em 0.32em;
+  background: #ffffff1a;
+  border-radius: 6px;
+}
+.bubble .content pre code {
+  display: block;
+  padding: 10px 12px;
+  border-radius: 10px;
+  overflow-x: auto;
+  background: #111827;
+}
+
+/* --- Small chip button (Copy) baseline skin; layout handled by Tailwind --- */
+.chip {
+  border: 1px solid #ffffff33;
+  background: #ffffff12;
+  color: #eaf2ff;
+  border-radius: 999px;
+}

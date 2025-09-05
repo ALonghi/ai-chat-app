@@ -16,20 +16,26 @@ export default function ChatBubble({
     const isUser = msg.role === "user";
 
     return (
-        <div className={`bubble ${isUser ? "user" : "assistant"}`} aria-live="polite">
-            <div className="bubble-body">
-                <div className="role">{isUser ? "You" : "AI"}</div>
+        <div
+            className={[
+                "bubble max-w-full rounded-2xl p-4",
+                isUser ? "ms-auto" : "me-auto",
+            ].join(" ")}
+            aria-live="polite"
+        >
+            <div className="grid gap-2">
+                <div className="text-[11px] uppercase tracking-wider opacity-70">
+                    {isUser ? "You" : "AI"}
+                </div>
 
-                <div className="content">
+                <div className="content leading-relaxed">
                     {typing ? (
                         <span className="dot-cursor" />
                     ) : msg.content === "[stopped]" ? (
-                        <span className="stopped">[stopped]</span>
+                        <span className="opacity-75 italic text-slate-300">[stopped]</span>
                     ) : (
                         <ReactMarkdown
-                            // GitHub-flavored Markdown (bold, italics, tables, strikethrough, task lists)
                             remarkPlugins={[remarkGfm]}
-                            // Sanitize any embedded HTML the model might produce
                             rehypePlugins={[rehypeSanitize]}
                         >
                             {msg.content}
