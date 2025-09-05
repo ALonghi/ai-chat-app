@@ -1,103 +1,162 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useEffect, useRef, useState } from "react";
+import Header from "@/components/Header";
+import MessageList from "@/components/MessageList";
+import Composer from "@/components/Composer";
+import { Message } from "../types/message";
+
+export default function Page() {
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      role: "system",
+      content:
+        "You are a helpful assistant. Always format output as Markdown. Use real Markdown headings (#, ##, ###), bold (**), italics (*), lists, and code fences when appropriate.",
+    },
+  ]);
+
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const listEndRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+
+  useEffect(() => {
+    listEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, loading]);
+
+  async function send() {
+    const text = input.trim();
+    if (!text || loading) return;
+
+    const nextMessages: Message[] = [...messages, { role: "user", content: text }];
+    // Pre-create one assistant bubble (empty) that we'll fill while streaming.
+    setMessages([...nextMessages, { role: "assistant", content: "" }]);
+    setInput("");
+    setLoading(true);
+
+    const ac = new AbortController();
+    abortRef.current = ac;
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: nextMessages }),
+        signal: ac.signal,
+      });
+
+      if (!res.ok || !res.body) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+
+      // Accumulator + RAF batching to reduce React re-renders and avoid duplicates.
+      let acc = "";
+      let rafPending = false;
+      function flushToUI() {
+        setMessages((prev) => {
+          const copy = [...prev];
+          const last = copy[copy.length - 1];
+          if (last?.role === "assistant") {
+            last.content = acc; // assign the full accumulated content (safe against duplicates)
+          }
+          return copy;
+        });
+        rafPending = false;
+      }
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        if (!chunk) continue;
+
+        // Append whatever the backend sent
+        acc += chunk;
+
+        // Batch DOM updates to animation frames
+        if (!rafPending) {
+          rafPending = true;
+          requestAnimationFrame(flushToUI);
+        }
+      }
+
+      // final flush (in case RAF didn't run)
+      if (rafPending) flushToUI();
+    } catch (err) {
+      // If the user intentionally aborted, don't show an error message.
+      if (ac.signal.aborted) {
+        // Instead of removing an empty assistant bubble, mark it as stopped:
+        setMessages((prev) => {
+          const copy = [...prev];
+          const last = copy[copy.length - 1];
+          if (last?.role === "assistant" && last.content === "") {
+            // <-- Replace the removal with this line:
+            last.content = "[stopped]";
+          }
+          return copy;
+        });
+        // No error UI needed for an intentional stop.
+      } else {
+        // Unexpected error — replace the assistant bubble with the error message.
+        console.error("Streaming error:", err);
+        setMessages((prev) => [
+          ...prev.slice(0, -1),
+          {
+            role: "assistant",
+            content:
+              "Sorry—something went wrong while streaming. Please try again.",
+          },
+        ]);
+      }
+    } finally {
+      setLoading(false);
+      abortRef.current = null;
+    }
+  }
+
+  function cancel() {
+    // user pressed Stop
+    abortRef.current?.abort();
+    // We don't immediately mutate messages here — the send() catch/finally will clean up.
+    setLoading(false);
+  }
+
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <div className="bg">
+      <main className="shell">
+        <Header />
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+        {/* unified panel */}
+        <section className="glass panel">
+          <div className="chat">     {/* scrolls */}
+            <MessageList messages={messages} loading={loading} listEndRef={listEndRef} />
+          </div>
+
+          <div className="composer"> {/* sticks at bottom of panel */}
+            <Composer
+              input={input}
+              setInput={setInput}
+              loading={loading}
+              onSend={send}
+              onCancel={cancel}
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
+          </div>
+        </section>
+
+        {/* <footer className="footer">
+          <span>
+            Streaming via OpenAI Chat Completions API (
+            <a href="https://platform.openai.com/docs/api-reference/chat">
+              docs
+            </a>
+            ).
+          </span>
+        </footer> */}
       </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
     </div>
   );
 }
