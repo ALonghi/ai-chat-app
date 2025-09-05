@@ -1,5 +1,5 @@
 {
-  "name": "cameron-england-poc",
+  "name": "open-ai-chat",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -11,11 +11,9 @@
   "dependencies": {
     "@ai-sdk/openai": "^2.0.24",
     "ai": "^5.0.33",
-    "dompurify": "^3.2.6",
     "isomorphic-dompurify": "^2.26.0",
     "marked": "^16.2.1",
     "next": "15.5.2",
-    "openai": "^5.19.1",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-markdown": "^10.1.0",
