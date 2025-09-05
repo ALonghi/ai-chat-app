@@ -30,7 +30,11 @@ export default function ChatBubble({
 
                 <div className="content leading-relaxed">
                     {typing ? (
-                        <span className="dot-cursor" />
+                        <div className="flex items-center gap-x-1">
+                            <span className="dot-cursor" />
+                            <span className="dot-cursor" />
+                            <span className="dot-cursor" />
+                        </div>
                     ) : msg.content === "[stopped]" ? (
                         <span className="opacity-75 italic text-slate-300">[stopped]</span>
                     ) : (
